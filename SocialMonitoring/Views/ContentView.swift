@@ -53,8 +53,9 @@ struct ContentView<PermissionMangerWrapper>:
     
     @ViewBuilder
     var mainView: some View {
-        Text("Open a messanger and send a message")
+        Text("Open a messanger and send message\n(press return or return+command) then screenshot will be taken and saved to desktop.")
             .font(.system(size: 28, weight: .medium))
             .foregroundStyle(.white)
+            .multilineTextAlignment(.center)
     }
 }
