@@ -10,6 +10,7 @@ import ApplicationServices
 import Carbon.HIToolbox
 import ScreenCaptureKit
 import Combine
+import UniformTypeIdentifiers
 
 protocol ActivityManagerProtocol {
     func startMonitoring()
@@ -61,7 +62,7 @@ final class ActivityManager {
             print("Detected Enter key in social app: \(frontApp.localizedName ?? "Unknown")")
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.takeScreenshot()
+                self.takeScreenshot(ofAppBundleID: bundleID)
             }
         }
     }
@@ -86,15 +87,48 @@ extension ActivityManager: ActivityManagerProtocol {
 
 // MARK: - Make screenshot
 private extension ActivityManager {
-    func takeScreenshot() {
+    func takeScreenshot(ofAppBundleID targetBundleID: String) {
         Task {
             do {
-                let focusedWindowRect: CGRect = getFocusedWindowFrame() ??
-                    .init(x: 0, y: 0, width: 400, height: 400)
-                let cgImage = try await SCScreenshotManager.captureImage(in: focusedWindowRect)
-                if let nsImage = cgImage.asNSImage() {
-                    saveImageToDesktop(nsImage)
-                }
+                let content = try await SCShareableContent.current
+                guard let display = content.displays.first else { return }
+                
+
+                let scaleFactor = NSScreen.screens.first { screen in
+                    screen.frame.contains(
+                        CGPoint(
+                            x: display.frame.origin.x,
+                            y: display.frame.origin.y
+                        )
+                    )
+                }?.backingScaleFactor ?? 2.0
+                
+                let appToCapture = content.applications
+                    .first { $0.bundleIdentifier == targetBundleID }
+                
+                let filter = appToCapture
+                    .map {
+                        SCContentFilter(display: display, including: [$0], exceptingWindows: [])
+                    }
+                    ?? SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
+                
+                let config = SCStreamConfiguration()
+                config.width = Int(CGFloat(display.width) * scaleFactor)
+                config.height = Int(CGFloat(display.height) * scaleFactor)
+                config.captureResolution = .best
+                config.scalesToFit = true
+                
+                config.colorSpaceName = NSScreen.main?
+                    .colorSpace?
+                    .cgColorSpace?
+                    .name ?? CGColorSpace.displayP3
+                
+                config.pixelFormat = kCVPixelFormatType_32BGRA
+                config.showsCursor = false
+                
+                let cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+                
+                saveImageToDesktop(cgImage.asNSImage())
             } catch(let error) {
                 print(error)
             }

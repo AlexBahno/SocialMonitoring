@@ -8,7 +8,10 @@
 import SwiftUI
 
 extension CGImage {
-    func asNSImage() -> NSImage? {
-        return NSImage(cgImage: self, size: .zero)
+    func asNSImage() -> NSImage {
+        return NSImage(
+            cgImage: self,
+            size: NSSize(width: self.width, height: self.height)
+        )
     }
 }
