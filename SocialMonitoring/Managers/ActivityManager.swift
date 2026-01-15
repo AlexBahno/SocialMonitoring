@@ -20,14 +20,14 @@ protocol ActivityManagerProtocol {
 final class ActivityManager {
     // List of Bundle IDs
     let socialAppBundleIDs = [
-        "ru.keepcoder.Telegram",    // Telegram
-        "com.tdesktop.Telegram",
-        "net.whatsapp.WhatsApp",    // WhatsApp
-        "com.hnc.Discord",          // Discord
-        "com.apple.iChat",          // iMessage
-        "com.viber.mac"             // Viber
+        "telegram",    // Telegram
+        "whatsapp",    // WhatsApp
+        "ciscord",     // Discord
+        "ichat",       // iMessage
+        "viber"        // Viber
     ]
     private var globalMonitor: Any?
+    private var mouseMonitor: Any?
     
     private func handleKeyPress(_ event: NSEvent) {
         guard event.keyCode == kVK_Return else {
@@ -57,8 +57,12 @@ final class ActivityManager {
         guard let frontApp = NSWorkspace.shared.frontmostApplication,
               let bundleID = frontApp.bundleIdentifier else { return }
         
+        let isAppSocial = socialAppBundleIDs
+            .map({bundleID.lowercased().contains($0)})
+            .contains(where: {$0})
+        
         // Check if the active app is in our "Social" list
-        if socialAppBundleIDs.contains(bundleID) {
+        if isAppSocial {
             print("Detected Enter key in social app: \(frontApp.localizedName ?? "Unknown")")
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -75,12 +79,21 @@ extension ActivityManager: ActivityManagerProtocol {
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.handleKeyPress(event)
         }
+        
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
+            self?.checkCurrentAppAndScreenshot()
+        }
     }
     
     func stopMonitoring() {
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
             globalMonitor = nil
+        }
+        
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseMonitor = nil
         }
     }
 }
@@ -93,7 +106,6 @@ private extension ActivityManager {
                 let content = try await SCShareableContent.current
                 guard let display = content.displays.first else { return }
                 
-
                 let scaleFactor = NSScreen.screens.first { screen in
                     screen.frame.contains(
                         CGPoint(
@@ -110,7 +122,7 @@ private extension ActivityManager {
                     .map {
                         SCContentFilter(display: display, including: [$0], exceptingWindows: [])
                     }
-                    ?? SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
+                ?? SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
                 
                 let config = SCStreamConfiguration()
                 config.width = Int(CGFloat(display.width) * scaleFactor)
