@@ -28,48 +28,6 @@ final class ActivityManager {
     ]
     private var globalMonitor: Any?
     private var mouseMonitor: Any?
-    
-    private func handleKeyPress(_ event: NSEvent) {
-        guard event.keyCode == kVK_Return else {
-            return
-        }
-        
-        let flags = event.modifierFlags
-        let isCommandPressed = flags.contains(.command)
-        let isShiftPressed = flags.contains(.shift)
-        
-        // Command + Return
-        if isCommandPressed {
-            print("Detected: Cmd + Return")
-            checkCurrentAppAndScreenshot()
-            return
-        }
-        
-        if !isCommandPressed && !isShiftPressed {
-            print("Detected: Standard Return")
-            checkCurrentAppAndScreenshot()
-            return
-        }
-    }
-    
-    private func checkCurrentAppAndScreenshot() {
-        // Get the frontmost application
-        guard let frontApp = NSWorkspace.shared.frontmostApplication,
-              let bundleID = frontApp.bundleIdentifier else { return }
-        
-        let isAppSocial = socialAppBundleIDs
-            .map({bundleID.lowercased().contains($0)})
-            .contains(where: {$0})
-        
-        // Check if the active app is in our "Social" list
-        if isAppSocial {
-            print("Detected Enter key in social app: \(frontApp.localizedName ?? "Unknown")")
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.takeScreenshot(ofAppBundleID: bundleID)
-            }
-        }
-    }
 }
 
 // MARK: - ActivityManagerProtocol
@@ -81,7 +39,7 @@ extension ActivityManager: ActivityManagerProtocol {
         }
         
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
-            self?.checkCurrentAppAndScreenshot()
+            self?.checkPotentialSendEvent()
         }
     }
     
@@ -205,6 +163,85 @@ private extension ActivityManager {
             print("Screenshot saved to: \(fileURL.path)")
         } catch {
             print("Failed to save screenshot: \(error)")
+        }
+    }
+}
+
+// MARK: - Mouse Click
+private extension ActivityManager {
+    func checkPotentialSendEvent() {
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedElement: AnyObject?
+        let error = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement)
+        
+        guard error == .success, let element = focusedElement else { return }
+        let axElement = element as! AXUIElement
+        
+        let textBefore = getAXElementText(axElement)
+        
+        guard textBefore.count > 0 else { return }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            let textAfter = self.getAXElementText(axElement)
+            if textAfter.isEmpty {
+                print("Message Sent detected")
+                self.checkCurrentAppAndScreenshot()
+            }
+        }
+    }
+    
+    func getAXElementText(_ element: AXUIElement) -> String {
+        var valueRef: AnyObject?
+        let result = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef)
+        
+        if result == .success, let str = valueRef as? String {
+            return str
+        }
+        return ""
+    }
+}
+
+// MARK: - Tools
+private extension ActivityManager {
+    func handleKeyPress(_ event: NSEvent) {
+        guard event.keyCode == kVK_Return else {
+            return
+        }
+        
+        let flags = event.modifierFlags
+        let isCommandPressed = flags.contains(.command)
+        let isShiftPressed = flags.contains(.shift)
+        
+        // Command + Return
+        if isCommandPressed {
+            print("Detected: Cmd + Return")
+            checkCurrentAppAndScreenshot()
+            return
+        }
+        
+        if !isCommandPressed && !isShiftPressed {
+            print("Detected: Standard Return")
+            checkCurrentAppAndScreenshot()
+            return
+        }
+    }
+    
+    func checkCurrentAppAndScreenshot() {
+        // Get the frontmost application
+        guard let frontApp = NSWorkspace.shared.frontmostApplication,
+              let bundleID = frontApp.bundleIdentifier else { return }
+        
+        let isAppSocial = socialAppBundleIDs
+            .map({bundleID.lowercased().contains($0)})
+            .contains(where: {$0})
+        
+        // Check if the active app is in our "Social" list
+        if isAppSocial {
+            print("Detected Enter key in social app: \(frontApp.localizedName ?? "Unknown")")
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.takeScreenshot(ofAppBundleID: bundleID)
+            }
         }
     }
 }
